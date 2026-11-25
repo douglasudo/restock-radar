@@ -12,6 +12,8 @@ struct PageSignals: Decodable {
     var text: String?
     var buttons: [Button]?
     var labels: [String]?
+    /// Text of whatever sits in the sticky action bar at the bottom of the screen.
+    var bar: [String]?
     var ready: String?
     var error: String?
 }
@@ -45,6 +47,8 @@ enum Detector {
 
     // Buttons Lazada shows INSTEAD of Buy Now when sold out (seen on real SG screens).
     static let soldOutButtons = ["set reminder", "find similar products", "notify me", "sold out", "out of stock"]
+    /// On Lazada's phone website a sold-out product's only big button is "Add to Wishlist".
+    static let wishlistOnly = "add to wishlist"
 
     // Text on Lazada's anti-bot page.
     static let blockedWords = [
@@ -114,6 +118,17 @@ enum Detector {
         }
         if let b = buyButtons.first {
             return result(.outOfStock, "“\(b.t)” button is greyed out")
+        }
+
+        // 4b. Lazada phone site: sold out = the bottom bar only offers "Add to Wishlist".
+        let barText = (s.bar ?? []).map { $0.lowercased() }
+        let barHasBuy = barText.contains { t in buyWords.contains { t.contains($0) } }
+        let wishButton = buttons.contains { $0.t.lowercased() == wishlistOnly }
+        if !barHasBuy && (barText.contains { $0.contains(wishlistOnly) } || wishButton) {
+            return result(.outOfStock, "Sold out: Lazada only offers “Add to Wishlist”")
+        }
+        if barHasBuy, let t = (s.bar ?? []).first(where: { t in buyWords.contains { t.lowercased().contains($0) } }) {
+            return result(.inStock, "“\(t)” is showing in the buy bar")
         }
 
         // 5. Otherwise a visible label like "Item chosen is out of stock" / "This item just sold out".
@@ -205,8 +220,23 @@ enum Detector {
           if (m) price = m[0];
         }
 
+        var bar = [], seenBar = {};
+        if (document.elementsFromPoint) {
+          var W = window.innerWidth, H = window.innerHeight;
+          var pts = [[0.5, H - 25], [0.75, H - 25], [0.25, H - 25], [0.5, H - 45], [0.75, H - 45]];
+          for (var q = 0; q < pts.length; q++) {
+            var els = document.elementsFromPoint(W * pts[q][0], pts[q][1]) || [];
+            for (var r = 0; r < els.length && r < 6; r++) {
+              var bt = clean(els[r].innerText);
+              if (!bt || bt.length > 80 || seenBar[bt]) continue;
+              seenBar[bt] = true;
+              bar.push(bt);
+            }
+          }
+        }
+
         return JSON.stringify({
-          url: location.href, title: title, price: price,
+          url: location.href, title: title, price: price, bar: bar,
           text: text.slice(0, 60000), buttons: buttons, labels: labels,
           ready: document.readyState
         });

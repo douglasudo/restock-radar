@@ -28,10 +28,11 @@ struct AutoBuySettingsView: View {
                     Text("When a ticked product is back")
                 } footer: {
                     Text(buyMode == "lazadaApp"
-                         ? "Restock Radar opens the product in the Lazada app instantly. You tap Buy Now → Place Order and approve payment. Nothing below this section is needed."
+                         ? "Restock Radar opens the product in the Lazada app instantly. You tap Buy Now → Place Order and approve payment. No login is needed in Restock Radar: checking stock works without one, and you're already logged in to the Lazada app."
                          : "Restock Radar buys it inside its own Lazada browser (log in below once). Use Test mode first.")
                 }
 
+                if buyMode == "autoBuy" {
                 Section {
                     Button {
                         dismiss()
@@ -67,6 +68,7 @@ struct AutoBuySettingsView: View {
                     Text(testMode
                          ? "ON: the app goes all the way to checkout, then stops before Place Order. Nothing is bought. Open an item that's in stock and tap “Test auto-buy now”."
                          : "OFF: the app WILL place real orders with your account when an armed item comes back in stock.")
+                }
                 }
 
                 Section {
