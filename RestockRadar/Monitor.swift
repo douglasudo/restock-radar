@@ -49,6 +49,13 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
     private var abortCheck = false
     private var buyCancelled = false
     private var verificationNotified = false
+    private var verifyWatchTask: Task<Void, Never>?
+
+    /// Drop mode: fast refreshing for a limited time around a drop.
+    @Published private(set) var fastUntil: Date?
+    static var fastUntilShared: Date?
+    static var fastActive: Bool { (fastUntilShared ?? .distantPast) > Date() }
+    static let fastMinutes = 20.0
     private var lastJump: Date?
 
     /// True for a few seconds after we opened the Lazada app ourselves.
@@ -97,6 +104,10 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
     /// Random wait before an item's next refresh: anywhere in your chosen range,
     /// plus now and then a longer pause, so the pattern isn't a fixed beat.
     static func randomDelay() -> Double {
+        if fastActive {
+            // Drop mode: about as often as a person hammering refresh, never a fixed beat.
+            return Double.random(in: 8...15)
+        }
         let d = UserDefaults.standard
         let lo = max(5, d.object(forKey: "minInterval") as? Double ?? 45)
         let hi = max(lo + 1, d.object(forKey: "maxInterval") as? Double ?? 90)
@@ -135,7 +146,33 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
         }
     }
 
+    /// Turn drop mode on for 20 minutes (and pull the next checks forward), or off.
+    func setFastMode(_ on: Bool) {
+        if on {
+            let end = Date().addingTimeInterval(Self.fastMinutes * 60)
+            fastUntil = end
+            Self.fastUntilShared = end
+            var offset = 0.0
+            for item in activeItems().shuffled() {
+                let due = Date().addingTimeInterval(offset)
+                if (nextDue[item.id] ?? .distantFuture) > due { nextDue[item.id] = due }
+                offset += Double.random(in: 2...5)
+            }
+            if !isRunning { start() }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(Self.fastMinutes * 60 * 1_000_000_000))
+                guard let self = self, let f = self.fastUntil, f <= Date() else { return }
+                self.fastUntil = nil
+                Self.fastUntilShared = nil
+            }
+        } else {
+            fastUntil = nil
+            Self.fastUntilShared = nil
+        }
+    }
+
     func stop() {
+        setFastMode(false)
         isRunning = false
         loopTask?.cancel()
         loopTask = nil
@@ -239,10 +276,36 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
         needsVerification = false
         verificationNotified = false
         browserOpen = false
-        // Give Lazada a breather after its check: nothing reloads for the next 1–2 minutes.
-        let calm = Date().addingTimeInterval(Double.random(in: 60...120))
+        verifyWatchTask?.cancel()
+        verifyWatchTask = nil
+        alarmPlayer.stop()
+        // Give Lazada a breather after its check before reloading anything.
+        let pause = Self.fastActive ? Double.random(in: 20...40) : Double.random(in: 60...120)
+        let calm = Date().addingTimeInterval(pause)
         for (id, due) in nextDue where due < calm { nextDue[id] = calm }
         if nextScan < calm { nextScan = calm.addingTimeInterval(600) }
+    }
+
+    /// While the check is on screen, look (locally, no extra page loads) every 2 s
+    /// for the moment you've passed it, then carry on watching automatically.
+    private func watchForVerificationPassed() {
+        verifyWatchTask?.cancel()
+        verifyWatchTask = Task { @MainActor [weak self] in
+            while true {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard let self = self, !Task.isCancelled, self.needsVerification else { return }
+                guard !self.webView.isLoading, let s = await self.readSignals() else { continue }
+                let url = (s.url ?? "").lowercased()
+                let onCheck = ["punish", "captcha", "_____tmd_____"].contains { url.contains($0) }
+                let text = s.text ?? ""
+                guard !onCheck, text.count > 1500 else { continue }
+                let probe = WatchItem(name: "", urlString: s.url ?? "")
+                if Detector.decide(s, item: probe).status != .blocked {
+                    self.resumeAfterVerification()
+                    return
+                }
+            }
+        }
     }
 
     // MARK: - Alarm
@@ -279,7 +342,7 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
             return
         }
         let autoScan = UserDefaults.standard.object(forKey: "autoScan") as? Bool ?? true
-        if autoScan && !isScanning && Date() >= nextScan {
+        if autoScan && !Self.fastActive && !isScanning && Date() >= nextScan {
             await scanOfficialStore(manual: false)
             return
         }
@@ -515,12 +578,16 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
         case .blocked:
             needsVerification = true
             nextDue[id] = Date()
+            browserOpen = true          // the check is already on screen in the app's browser
             if !verificationNotified {
                 verificationNotified = true
-                Notifier.send(title: "Lazada wants a quick check",
-                              body: "Watching is paused. Open Restock Radar, slide the check, then tap Resume.",
+                AudioServicesPlayAlertSound(SystemSoundID(1005))
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+                Notifier.send(title: "Slide Lazada's check",
+                              body: "Open Restock Radar and slide it. Watching carries on by itself once you're through.",
                               url: nil)
             }
+            watchForVerificationPassed()
         default:
             break
         }

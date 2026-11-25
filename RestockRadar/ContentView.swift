@@ -238,6 +238,34 @@ struct ControlCard: View {
                 .font(.footnote)
                 .foregroundColor(.secondary)
 
+            if let until = monitor.fastUntil {
+                HStack {
+                    Label {
+                        Text("Drop mode: every 8–15s until ") + Text(until, style: .time)
+                    } icon: {
+                        Image(systemName: "bolt.fill")
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(.orange)
+                    Spacer()
+                    Button("Stop") { monitor.setFastMode(false) }
+                        .font(.footnote)
+                }
+            } else if !selected.isEmpty {
+                Button {
+                    monitor.setFastMode(true)
+                } label: {
+                    Label("Drop mode: refresh every 8–15s for 20 min", systemImage: "bolt.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
+                Text("Use it just before a drop. Tick only 1–3 products, or Lazada's slider shows up a lot.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             if !selected.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     if buyMode == "lazadaApp" {
@@ -249,8 +277,10 @@ struct ControlCard: View {
                               systemImage: testMode ? "checkmark.shield" : "exclamationmark.triangle.fill")
                             .foregroundColor(testMode ? .blue : .red)
                     }
-                    Label("Refreshes every \(Int(minInterval))–\(Int(maxInterval))s, random",
-                          systemImage: "shuffle")
+                    if monitor.fastUntil == nil {
+                        Label("Refreshes every \(Int(minInterval))–\(Int(maxInterval))s, random",
+                              systemImage: "shuffle")
+                    }
                 }
                 .font(.footnote.weight(.semibold))
             }
@@ -478,7 +508,7 @@ struct BrowserScreen: View {
                 .background((buy.isLive ? Color.red : Color.blue).opacity(0.12))
             } else if monitor.needsVerification {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Do Lazada's check below (usually a slider). When the product page shows, tap Resume.")
+                    Text("Slide Lazada's check below. Watching carries on by itself once the product page shows (or tap Resume).")
                         .font(.footnote)
                     Button {
                         monitor.resumeAfterVerification()
