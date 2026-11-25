@@ -209,8 +209,8 @@ struct ControlCard: View {
     @Binding var keepAwake: Bool
     @AppStorage("testMode") private var testMode = true
     @AppStorage("buyMode") private var buyMode = "lazadaApp"
-    @AppStorage("minInterval") private var minInterval = 20.0
-    @AppStorage("maxInterval") private var maxInterval = 50.0
+    @AppStorage("minInterval") private var minInterval = 45.0
+    @AppStorage("maxInterval") private var maxInterval = 90.0
 
     private var selected: [WatchItem] { store.items.filter { $0.isEnabled } }
     private var buyCount: Int { selected.filter { $0.autoBuy && $0.maxPrice != nil }.count }
@@ -294,7 +294,7 @@ struct LinkCheckRow: View {
                     Label("Check all links (\(store.items.count))", systemImage: "checkmark.seal")
                 }
                 .disabled(monitor.isRunning || monitor.buying != nil)
-                Text("\(ok) working · \(broken) broken · \(store.items.count - ok - broken) not checked yet")
+                Text("\(ok) working · \(broken) broken · \(store.items.count - ok - broken) not checked yet. Optional and slow on purpose (about 30 s per product); you can skip it.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

@@ -9,8 +9,8 @@ struct AutoBuySettingsView: View {
     @AppStorage("officialOnly") private var officialOnly = true
     @AppStorage("autoScan") private var autoScan = true
     @AppStorage("desktopMode") private var desktopMode = false
-    @AppStorage("minInterval") private var minInterval = 20.0
-    @AppStorage("maxInterval") private var maxInterval = 50.0
+    @AppStorage("minInterval") private var minInterval = 45.0
+    @AppStorage("maxInterval") private var maxInterval = 90.0
     @AppStorage("takeBreaks") private var takeBreaks = true
     @State private var confirmLive = false
 

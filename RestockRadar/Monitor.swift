@@ -62,14 +62,16 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
         UserDefaults.standard.string(forKey: "buyMode") ?? "lazadaApp"
     }
 
-    static let mobileUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1"
-    static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15"
+    /// Desktop mode only. Mobile mode uses the phone's real Safari identity (see init).
+    static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
 
     override init() {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()          // keeps your Lazada login between checks
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = .all
+        // Same identity as Safari on this iPhone (real iOS version), instead of a made-up one.
+        config.applicationNameForUserAgent = "Version/26.0 Mobile/15E148 Safari/604.1"
         webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: config)
         webView.allowsBackForwardNavigationGestures = true
         super.init()
@@ -83,7 +85,7 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
 
     func applyUserAgent() {
         let desktop = UserDefaults.standard.object(forKey: "desktopMode") as? Bool ?? false
-        webView.customUserAgent = desktop ? Self.desktopUA : Self.mobileUA
+        webView.customUserAgent = desktop ? Self.desktopUA : nil
     }
 
     private var isTestMode: Bool {
@@ -96,8 +98,8 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
     /// plus now and then a longer pause, so the pattern isn't a fixed beat.
     static func randomDelay() -> Double {
         let d = UserDefaults.standard
-        let lo = max(5, d.object(forKey: "minInterval") as? Double ?? 20)
-        let hi = max(lo + 1, d.object(forKey: "maxInterval") as? Double ?? 50)
+        let lo = max(5, d.object(forKey: "minInterval") as? Double ?? 45)
+        let hi = max(lo + 1, d.object(forKey: "maxInterval") as? Double ?? 90)
         var delay = Double.random(in: lo...hi)
         let breaks = d.object(forKey: "takeBreaks") as? Bool ?? true
         if breaks && Double.random(in: 0..<1) < 0.08 {
@@ -183,7 +185,7 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
                 await self.check(itemID: id)
                 done += 1
                 self.verifyProgress = "Checking links \(done)/\(ids.count)"
-                try? await Task.sleep(nanoseconds: UInt64(Double.random(in: 3...8) * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(Double.random(in: 20...40) * 1_000_000_000))
             }
             let items = self.store?.items ?? []
             let broken = items.filter { $0.linkStatus == "broken" }.count
@@ -237,6 +239,10 @@ final class Monitor: NSObject, ObservableObject, WKNavigationDelegate {
         needsVerification = false
         verificationNotified = false
         browserOpen = false
+        // Give Lazada a breather after its check: nothing reloads for the next 1–2 minutes.
+        let calm = Date().addingTimeInterval(Double.random(in: 60...120))
+        for (id, due) in nextDue where due < calm { nextDue[id] = calm }
+        if nextScan < calm { nextScan = calm.addingTimeInterval(600) }
     }
 
     // MARK: - Alarm

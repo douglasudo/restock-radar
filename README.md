@@ -105,7 +105,7 @@ If Lazada asks for a PIN, OTP, CVV or slider check, the bot stops, Xcode plays t
 **Running it:**
 1. Tick the products you want automated. **Tick all** / **Untick all** are in the list header.
 2. Tap **Start**.
-3. Each ticked product refreshes after a random wait, 20–50 seconds by default with an occasional longer break. You can change the range in Settings → Refresh timing.
+3. Each ticked product refreshes after a random wait, 45–90 seconds by default with an occasional longer break. You can change the range in Settings → Refresh timing.
 4. When something is bought, it comes off the list and goes into **Bought**.
 
 **Test it first.** Open any item that's in stock right now and tap **Test auto-buy now**. Watch it go to checkout. If it gets stuck, tell Claude the step it stopped at. When it works, turn Test mode off; the app asks you to confirm.
